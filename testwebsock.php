@@ -29,7 +29,10 @@ class echoServer extends WebSocketServer {
   }
 }
 
-$echo = new echoServer("0.0.0.0","9000");
+//echo phpversion();
+
+
+$echo = new echoServer("127.0.0.1","9001", 1048576);
 
 try {
   $echo->run();

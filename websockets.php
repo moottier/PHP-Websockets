@@ -49,6 +49,15 @@ abstract class WebSocketServer {
     }
   }
 
+//   protected function broadcast($users=null, $message) {
+//       if (!$users) {
+//           $users = $this->users;
+//       }
+//       foreach ($users as $user) {
+//         $this->send($user, $message);
+//       }
+//   }
+  
   protected function tick() {
     // Override this for any process that should happen periodically.  Will happen at least once
     // per second, but possibly more often.

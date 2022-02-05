@@ -13,9 +13,17 @@ class broadcastServer extends WebSocketServer {
     //protected $maxBufferSize = 1048576; //1MB... overkill for an echo server, but potentially plausible for other applications.
 
     protected function process ($user, $message) {
-        foreach ($this->users as $user){
-            $this->send($user,$message);
+        if ($user->alias == "Unknown")
+        {
+            $user->alias = $message;
         }
+        else
+        {
+            foreach ($this->users as $user){
+                $this->send($user,$message);
+            }
+        }
+
     }
 
 
@@ -36,7 +44,6 @@ class broadcastServer extends WebSocketServer {
 }
 
 //echo phpversion();
-$ip = $_SERVER['SERVER_ADDR'];
 print_r("IP: $ip");
 $echo = new broadcastServer("127.0.0.1", "9002", 1048576);
 

@@ -83,16 +83,31 @@ abstract class WebSocketServer
             $found = false;
             foreach ($this->users as $currentUser)
             {
+                $this->stdout("User exists: " . $currentUser);
                 if ($hm['user']->socket == $currentUser->socket)
                 {
                     $found = true;
                     if ($currentUser->handshake)
                     {
-                        // AMM 2021-11-06 DEBUG
-                        $this->stdout("Found message recipient: " . $currentUser);
-                        $this->stdout("Sending" . $hm['message']);
-                        unset($this->heldMessages[$key]);
-                        $this->send($currentUser, $hm['message']);
+                        $this->stdout("Handshook");
+                        if ($currentUser->alias) 
+                        {
+                            // AMM 2021-11-06 DEBUG
+                            $this->stdout("Alias" . $currentUser->alias);
+                            $this->stdout("Found message recipient: " . $currentUser);
+                            $this->stdout("Sending" . $hm['message']);
+                            unset($this->heldMessages[$key]);
+                            $this->send($currentUser, $hm['message']);
+                        } 
+                        else 
+                        {
+                            // AMM 2021-11-06 DEBUG
+                            $this->stdout("No alias");
+                            $this->stdout("Found message recipient: " . $currentUser);
+                            $this->stdout("Sending" . $hm['message']);
+                            unset($this->heldMessages[$key]);
+                            $this->send($currentUser, $hm['message']);
+                        }
                     }
                 }
             }

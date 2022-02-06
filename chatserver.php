@@ -13,14 +13,24 @@ class broadcastServer extends WebSocketServer {
     //protected $maxBufferSize = 1048576; //1MB... overkill for an echo server, but potentially plausible for other applications.
 
     protected function process ($user, $message) {
+        echo "Processing!";
         if ($user->alias == "Unknown")
         {
+            echo "Set alias to " . $message . "\n"; 
             $user->alias = $message;
         }
         else
         {
-            foreach ($this->users as $user){
-                $this->send($user,$message);
+            echo "Disperse message from " . $user->alias . " :: " . $user->id . " !\n";
+            foreach ($this->users as $connectedUser){
+                echo "Send to " . $connectedUser->alias . " :: " . $connectedUser->id . " ?\n";
+                if ($connectedUser != $user)
+                {
+                    echo "New message!\n";
+                    $messageObj = new $this->messageClass($message, $user, $connectedUser);
+                    $this->send($messageObj);
+                }
+        
             }
         }
 
@@ -29,11 +39,9 @@ class broadcastServer extends WebSocketServer {
 
     protected function connected ($user) {
         // AMM 2021-11-06 DEBUG
-        $this->stdout("Connected: " . $user->id);
-        // AMM 2021-11-06 DEBUG
-        $this->stdout("Messaging: " . $user->id);
-        $message = "Hello!\r\n";
-        $this->send($user,$message);
+        $this->stdout("User connected. Messaging: " . $user->id . '\r\n');
+        $message = new $this->messageClass("Hello!\r\n", $this->serverUser(), $user);
+        $this->send($message);
     }
 
     protected function closed ($user) {
@@ -44,7 +52,6 @@ class broadcastServer extends WebSocketServer {
 }
 
 //echo phpversion();
-print_r("IP: $ip");
 $echo = new broadcastServer("127.0.0.1", "9002", 1048576);
 
 try {

@@ -2,10 +2,20 @@
 //require_once('./daemonize.php');
 require_once ('./users.php');
 
+class Message
+{
+    function __construct($message, $sender = NULL, $receiver = NULL)
+    {
+        $this->message = $message;
+        $this->sender = $sender;
+        $this->receiver = $receiver;
+    }
+}
+    
 abstract class WebSocketServer
 {
 
-    protected $userClass = 'WebSocketUser'; // redefine this if you want a custom user class.  The custom user class should inherit from WebSocketUser.
+    protected $userClass = 'MyUser'; // redefine this if you want a custom user class.  The custom user class should inherit from WebSocketUser.
     protected $maxBufferSize;
     protected $master;
     protected $sockets = array();
@@ -15,6 +25,7 @@ abstract class WebSocketServer
     protected $headerOriginRequired = false;
     protected $headerSecWebSocketProtocolRequired = false;
     protected $headerSecWebSocketExtensionsRequired = false;
+    protected $messageClass = 'Message';
 
     function __construct($addr, $port, $bufferLength = 2048)
     {
@@ -22,7 +33,6 @@ abstract class WebSocketServer
         $this->maxBufferSize = $bufferLength;
         $this->master = socket_create(AF_INET, SOCK_STREAM, SOL_TCP) or die("Failed: socket_create()");
         socket_set_option($this->master, SOL_SOCKET, SO_REUSEADDR, 1) or die("Failed: socket_option()");
-        //socket_bind($this->master, $addr, $port)                      or die("Failed: socket_bind()");
         socket_bind($this->master, $addr, $port);
         $err_code = socket_last_error($this->master);
         $this->stdout("ErrCode: " . $err_code . " :: " . socket_strerror($err_code));
@@ -42,37 +52,37 @@ abstract class WebSocketServer
         
     }
 
-    protected function send($user, $message)
+    protected function serverUser()
     {
-        if ($user->handshake)
+        return new $this->userClass('0', $this->master, "Server");
+    }
+
+    protected function send($message)    // FIXME: added $sender Feb5, when is fn called without $sender?
+    {
+        echo "Got message to send. Body: " . $message->message . " - Sender: " . $message->sender->alias . " - Receiver: " . $message->receiver->alias . " !\n";
+        if ($message->receiver->handshake)
         {
-            $message = $this->frame($message, $user);
-            $result = @socket_write($user->socket, $message, strlen($message));
+            $msgJSON = array(
+                'message' => $message->message
+                ,'from_uid' => $message->sender->id
+                ,'from_alias' => $message->sender->alias
+                ,'to_uid' => $message->receiver->id
+            );
+            $msgJSON = json_encode($msgJSON);
+            $msgJSON = $this->frame($msgJSON, $message->receiver);
+            $result = @socket_write($message->receiver->socket, $msgJSON, strlen($msgJSON));
         }
         else
         {
-            // User has not yet performed their handshake.  Store for sending later.
-            $holdingMessage = array(
-                'user' => $user,
-                'message' => $message
-            );
-            $this->heldMessages[] = $holdingMessage;
+            $this->heldMessages[] = $message;
         }
     }
 
-    //   protected function broadcast($users=null, $message) {
-    //       if (!$users) {
-    //           $users = $this->users;
-    //       }
-    //       foreach ($users as $user) {
-    //         $this->send($user, $message);
-    //       }
-    //   }
+
     protected function tick()
     {
         // Override this for any process that should happen periodically.  Will happen at least once
-        // per second, but possibly more often.
-        
+        // per second, but possibly more often.        
     }
 
     protected function _tick()
@@ -83,7 +93,6 @@ abstract class WebSocketServer
             $found = false;
             foreach ($this->users as $currentUser)
             {
-                $this->stdout("User exists: " . $currentUser);
                 if ($hm['user']->socket == $currentUser->socket)
                 {
                     $found = true;
@@ -97,7 +106,7 @@ abstract class WebSocketServer
                             $this->stdout("Found message recipient: " . $currentUser);
                             $this->stdout("Sending" . $hm['message']);
                             unset($this->heldMessages[$key]);
-                            $this->send($currentUser, $hm['message']);
+                            $this->send($hm['message']);
                         } 
                         else 
                         {
@@ -106,7 +115,7 @@ abstract class WebSocketServer
                             $this->stdout("Found message recipient: " . $currentUser);
                             $this->stdout("Sending" . $hm['message']);
                             unset($this->heldMessages[$key]);
-                            $this->send($currentUser, $hm['message']);
+                            $this->send($hm['message']);
                         }
                     }
                 }
@@ -140,19 +149,9 @@ abstract class WebSocketServer
             }
             $read = $this->sockets;
             $write = $except = null;
-            // AMM 2021-11-06 DEBUG
-            //$this->stdout("Tick");
             $this->_tick();
             $this->tick();
             @socket_select($read, $write, $except, 1);
-            // AMM 2021-11-06 DEBUG
-            // @$this->stdout("# non-block reads: " . count($read));
-            // @$this->stdout("# non-block writes: " . count($write));
-            // @$this->stdout("# excepts: " . count($except));
-            
-            // $this->stdout("# Non-block reads: " . gettype($read));
-            // $this->stdout("# Non-block writes: " . gettype($write));
-            // $this->stdout("# Excepts: " . gettype($except));
             
             foreach ($read as $socket)
             {
@@ -223,12 +222,6 @@ abstract class WebSocketServer
                             $this->stdout("User not handshaked.");
 
                             $tmp = str_replace("\r", '', $buffer);
-                            //$tmp = $buffer;
-
-                            // AMM 2021-11-06 DEBUG
-                            //$this->stdout("Current buffer: " . bin2hex($buffer));
-
-                            //if (strpos($tmp . "\n\n", "\n\n") === false)
                             if (strpos($tmp, "\n\n") === false)
                             {
                                 // AMM 2021-11-06 DEBUG
@@ -297,16 +290,13 @@ abstract class WebSocketServer
     {
         // AMM 2021-11-06 DEBUG
         $this->stdout("Doing handshake");
-        // AMM 2021-11-06 DEBUG
-        //$this->stdout("Buffer: ");
+
         $magicGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         $headers = array();
         $lines = explode("\n", $buffer);
         
         foreach ($lines as $line)
         {
-            // AMM 2021-11-06 DEBUG
-            //$this->stdout($line);
             if (strpos($line, ":") !== false)
             {
                 $header = explode(":", $line, 2);
@@ -494,6 +484,7 @@ abstract class WebSocketServer
 
     protected function frame($message, $user, $messageType = 'text', $messageContinues = false)
     {
+        echo "In frame: " . $message . "\n";
         switch ($messageType)
         {
             case 'continuous':
@@ -570,8 +561,10 @@ abstract class WebSocketServer
                 $lengthField = chr(0) . $lengthField;
             }
         }
-
-        return chr($b1) . chr($b2) . $lengthField . $message;
+        $rval = chr($b1) . chr($b2) . $lengthField . $message;
+        echo "RVal: \n";
+        echo $rval;
+        return $rval;
     }
 
     //check packet if he have more than one frame and process each frame individually

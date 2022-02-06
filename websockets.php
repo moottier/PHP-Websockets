@@ -67,6 +67,7 @@ abstract class WebSocketServer
                 ,'from_uid' => $message->sender->id
                 ,'from_alias' => $message->sender->alias
                 ,'to_uid' => $message->receiver->id
+                ,'to_alias' => $message->receiver->alias
             );
             $msgJSON = json_encode($msgJSON);
             $msgJSON = $this->frame($msgJSON, $message->receiver);
